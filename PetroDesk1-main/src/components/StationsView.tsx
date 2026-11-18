@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Edit3, Plus, X } from 'lucide-react';
+import { Edit3, Plus, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatPeso } from '../lib/format';
 import type { Station, UserRole } from '../lib/types';
+import { BrandLogo } from './BrandLogo';
 
 export function StationsView() {
   const [stations, setStations] = useState<Station[]>([]);
@@ -191,7 +192,7 @@ export function StationsView() {
                 </div>
 
                 <div className="mt-2 flex items-start gap-2.5">
-                  <Building2 className="w-4 h-4 text-teal-700 dark:text-teal-400 shrink-0 mt-0.5" />
+                  <BrandLogo brand={st.brand} className="w-10 h-10 shrink-0 rounded-lg shadow-sm" />
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-400">{st.brand}</p>
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 truncate">{st.name}</h3>
@@ -275,14 +276,17 @@ export function StationsView() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Brand / Network</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Shell / Petron / Caltex"
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg"
-                />
+                <div className="flex items-center gap-2">
+                  <BrandLogo brand={brand || 'PetroDesk'} className="w-8 h-8 shrink-0 rounded" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="Shell / Petron / Caltex"
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg"
+                  />
+                </div>
               </div>
             </div>
             <div>
@@ -368,13 +372,16 @@ export function StationsView() {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Brand / Network</label>
-              <input
-                type="text"
-                required
-                value={editBrand}
-                onChange={(e) => setEditBrand(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg"
-              />
+              <div className="flex items-center gap-2">
+                <BrandLogo brand={editBrand || 'PetroDesk'} className="w-8 h-8 shrink-0 rounded" />
+                <input
+                  type="text"
+                  required
+                  value={editBrand}
+                  onChange={(e) => setEditBrand(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Branch / Station Name</label>
