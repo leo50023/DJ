@@ -1,0 +1,77 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #0f172a;
+    background-color: #f8fafc;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  html.dark {
+    color: #f1f5f9;
+    background-color: #020617;
+  }
+
+  .font-mono {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media print {
+  @page {
+    margin: 8mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body > *:not(.print-portal) {
+    display: none !important;
+  }
+
+  .print-portal {
+    position: static !important;
+    inset: auto !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  .print-portal .no-print {
+    display: none !important;
+  }
+
+  .print-portal .print-card {
+    border: none !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  .print-portal .print-scroll-body {
+    max-height: none !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+
+  #printable-receipt {
+    border: none !important;
+    border-radius: 0 !important;
+    max-width: 320px !important;
+    margin: 0 auto !important;
+    padding: 8px 0 !important;
+  }
+}

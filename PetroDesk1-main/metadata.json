@@ -1,0 +1,6 @@
+{
+  "name": "PetroDesk POS",
+  "description": "Web-based gasoline station POS, fuel and store inventory tracking, daily sales logging, and Z-reading management system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
