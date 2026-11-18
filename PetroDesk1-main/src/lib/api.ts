@@ -195,6 +195,7 @@ export const api = {
     brand: string;
     address: string;
     tin: string;
+    logoUrl?: string | null;
     seedStarterInventory: boolean;
     createDefaultStaff: boolean;
   }) {
@@ -206,7 +207,7 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
-  updateStation(id: number, payload: { name?: string; brand?: string; address?: string; tin?: string; active?: boolean }) {
+  updateStation(id: number, payload: { name?: string; brand?: string; address?: string; tin?: string; active?: boolean; logoUrl?: string | null }) {
     return request<{ station: Station }>(`/api/stations/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),

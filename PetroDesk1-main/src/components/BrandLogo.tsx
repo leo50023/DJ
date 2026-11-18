@@ -2,6 +2,7 @@ import React from 'react';
 
 interface BrandLogoProps {
   brand: string;
+  logoUrl?: string | null;
   className?: string;
 }
 
@@ -113,7 +114,11 @@ function GenericBrandLogo({ brand, className }: { brand: string; className?: str
   );
 }
 
-export function BrandLogo({ brand, className = 'w-10 h-10' }: BrandLogoProps) {
+export function BrandLogo({ brand, logoUrl, className = 'w-10 h-10' }: BrandLogoProps) {
+  if (logoUrl) {
+    return <img src={logoUrl} alt={brand} className={`${className} object-cover`} />;
+  }
+
   const normalized = brand.trim().toLowerCase();
 
   if (normalized.includes('petron')) return <PetronLogo className={className} />;

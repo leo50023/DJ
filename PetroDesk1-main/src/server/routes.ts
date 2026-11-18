@@ -1471,6 +1471,7 @@ apiRouter.post('/stations', requireAuth, requireRole(['ADMIN']), async (req, res
     const brand = String(req.body?.brand || 'PetroDesk').trim() || 'PetroDesk';
     const address = String(req.body?.address || '').trim();
     const tin = String(req.body?.tin || '009-482-110-000').trim() || '009-482-110-000';
+    const logoUrl = req.body?.logoUrl ? String(req.body.logoUrl) : null;
     const seedStarter = req.body?.seedStarterInventory !== false;
     const createDefaultStaff = Boolean(req.body?.createDefaultStaff);
 
@@ -1491,6 +1492,7 @@ apiRouter.post('/stations', requireAuth, requireRole(['ADMIN']), async (req, res
       brand,
       address,
       tin,
+      logoUrl,
       active: true,
     });
     const stationId = station.get('id') as number;
@@ -1553,6 +1555,7 @@ apiRouter.patch('/stations/:id', requireAuth, requireRole(['ADMIN']), async (req
     if (req.body?.address !== undefined) updates.address = String(req.body.address).trim();
     if (req.body?.tin !== undefined) updates.tin = String(req.body.tin).trim();
     if (req.body?.active !== undefined) updates.active = Boolean(req.body.active);
+    if ('logoUrl' in req.body) updates.logoUrl = req.body.logoUrl ?? null;
 
     await station.update(updates);
     res.json({ station: station.get({ plain: true }) });

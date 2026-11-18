@@ -32,6 +32,7 @@ export interface StationAttrs {
   address: string;
   tin: string;
   active: boolean;
+  logoUrl?: string | null;
 }
 
 export interface UserAttrs {
@@ -147,6 +148,7 @@ export const StationModel = sequelize.define<Model<StationAttrs>>(
     address: { type: DataTypes.STRING(200), allowNull: false },
     tin: { type: DataTypes.STRING(60), allowNull: false, defaultValue: '009-482-110-000' },
     active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    logoUrl: { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
   },
   { tableName: 'stations', timestamps: true }
 );
@@ -394,6 +396,7 @@ async function ensureMultiStationColumnsAndIndexes() {
   };
 
   await addColumnIfMissing('users', 'stationId INTEGER DEFAULT NULL', 'stationId');
+  await addColumnIfMissing('stations', 'logoUrl TEXT DEFAULT NULL', 'logoUrl');
   await addColumnIfMissing('fuel_tanks', 'stationId INTEGER NOT NULL DEFAULT 1', 'stationId');
   await addColumnIfMissing('store_items', 'stationId INTEGER NOT NULL DEFAULT 1', 'stationId');
   await addColumnIfMissing('sales', 'stationId INTEGER NOT NULL DEFAULT 1', 'stationId');

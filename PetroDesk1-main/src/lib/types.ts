@@ -11,6 +11,7 @@ export interface Station {
   address: string;
   tin: string;
   active: boolean;
+  logoUrl?: string | null;
   tankCount?: number;
   staffCount?: number;
   totalRevenue?: number;

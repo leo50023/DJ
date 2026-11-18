@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { formatPeso } from '../lib/format';
 import type { Station, UserRole } from '../lib/types';
 import { BrandLogo } from './BrandLogo';
+import { LogoUploader } from './LogoUploader';
 
 export function StationsView() {
   const [stations, setStations] = useState<Station[]>([]);
@@ -21,6 +22,7 @@ export function StationsView() {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [tin, setTin] = useState('009-482-110-000');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [seedStarterInventory, setSeedStarterInventory] = useState(true);
   const [createDefaultStaff, setCreateDefaultStaff] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,6 +33,7 @@ export function StationsView() {
   const [editName, setEditName] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editTin, setEditTin] = useState('');
+  const [editLogoUrl, setEditLogoUrl] = useState<string | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Station | null>(null);
 
   const showNotice = (msg: string) => {
@@ -65,6 +68,7 @@ export function StationsView() {
         brand,
         address,
         tin,
+        logoUrl,
         seedStarterInventory,
         createDefaultStaff,
       });
@@ -74,6 +78,7 @@ export function StationsView() {
       setName('');
       setAddress('');
       setTin('009-482-110-000');
+      setLogoUrl(null);
       setCreatedCredentials(res.generatedAccounts || []);
       showNotice(`Gas station "${res.station.brand} · ${res.station.name}" added.`);
       await loadStations();
@@ -95,6 +100,7 @@ export function StationsView() {
         name: editName,
         address: editAddress,
         tin: editTin,
+        logoUrl: editLogoUrl,
       });
       showNotice(`Updated ${editBrand} · ${editName}.`);
       setEditing(null);
@@ -192,7 +198,7 @@ export function StationsView() {
                 </div>
 
                 <div className="mt-2 flex items-start gap-2.5">
-                  <BrandLogo brand={st.brand} className="w-10 h-10 shrink-0 rounded-lg shadow-sm" />
+                  <BrandLogo brand={st.brand} logoUrl={st.logoUrl} className="w-10 h-10 shrink-0 rounded-lg shadow-sm" />
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wide text-teal-700 dark:text-teal-400">{st.brand}</p>
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 truncate">{st.name}</h3>
@@ -227,6 +233,7 @@ export function StationsView() {
                       setEditName(st.name);
                       setEditAddress(st.address);
                       setEditTin(st.tin);
+                      setEditLogoUrl(st.logoUrl ?? null);
                     }}
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors whitespace-nowrap"
                   >
@@ -289,6 +296,7 @@ export function StationsView() {
                 </div>
               </div>
             </div>
+            <LogoUploader brand={brand} logoUrl={logoUrl} onChange={setLogoUrl} />
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Branch / Station Name</label>
               <input
@@ -383,6 +391,7 @@ export function StationsView() {
                 />
               </div>
             </div>
+            <LogoUploader brand={editBrand} logoUrl={editLogoUrl} onChange={setEditLogoUrl} />
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Branch / Station Name</label>
               <input
