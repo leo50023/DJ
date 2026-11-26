@@ -1,0 +1,19 @@
+{
+  "name": "MixWave DJ Studio",
+  "short_name": "MixWave",
+  "description": "A responsive browser DJ studio with dual decks and local media playback.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
