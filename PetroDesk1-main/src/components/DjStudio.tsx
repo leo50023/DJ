@@ -7,9 +7,12 @@ import {
   Download,
   FolderOpen,
   Headphones,
+  Keyboard,
   Library,
   ListMusic,
   Mic2,
+  Mic,
+  MicOff,
   MonitorPlay,
   Music2,
   Pause,
@@ -23,28 +26,60 @@ import {
   Star,
   Upload,
   Volume2,
+  WandSparkles,
   Youtube,
   X,
 } from 'lucide-react';
+import {
+  DEFAULT_MACROS,
+  DEFAULT_SHORTCUTS,
+  KeyboardMacros,
+  SessionHistory,
+  SetPlanner,
+  ShowTimeline,
+  type MacroAction,
+  type MacroMap,
+  type SessionSummary,
+  type ShortcutAction,
+  type ShortcutMap,
+  type ShowCue,
+  type SmartTrack,
+  type TrackMood,
+} from './DjExtras';
 
 type Deck = 'A' | 'B';
-type StudioMode = 'DECKS' | 'SAMPLER' | 'PAD FX' | 'RECORDER';
+type StudioMode = 'DECKS' | 'SAMPLER' | 'PAD FX' | 'RECORDER' | 'SET PLANNER' | 'SHOW' | 'SHORTCUTS' | 'HISTORY';
 type FxMode = 'Off' | 'Low-pass' | 'High-pass';
+type VoiceLanguage = 'en-US' | 'fil-PH';
 
-type Track = {
-  id: string;
-  title: string;
-  artist: string;
-  duration: string;
+type Track = SmartTrack & {
   source: 'Local';
   color: string;
   file: File;
   url: string;
-  addedAt: number;
   favorite: boolean;
 };
 
 type Equalizer = { low: number; mid: number; high: number };
+type TrackUsage = { plays: number; lastPlayedAt: number };
+type TrackTag = { energy: number; mood: TrackMood };
+type PerformanceSession = { id: string; startedAt: number; plays: number; trackIds: string[]; recordings: number };
+type VoiceResult = { 0: { transcript: string }; length: number };
+type VoiceRecognitionEvent = { results: ArrayLike<VoiceResult> };
+type VoiceRecognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: VoiceRecognitionEvent) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+type VoiceRecognitionWindow = Window & {
+  SpeechRecognition?: new () => VoiceRecognition;
+  webkitSpeechRecognition?: new () => VoiceRecognition;
+};
 
 type AudioGraph = {
   context: AudioContext;
@@ -60,6 +95,109 @@ type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
+
+const STORAGE_KEYS = {
+  plan: 'mixwave_set_plan',
+  cues: 'mixwave_show_cues',
+  showStartedAt: 'mixwave_show_started_at',
+  history: 'mixwave_performance_history',
+  session: 'mixwave_current_session',
+  shortcuts: 'mixwave_shortcuts',
+  macros: 'mixwave_macros',
+  voiceLanguage: 'mixwave_voice_language',
+  trackTags: 'mixwave_track_tags',
+  trackUsage: 'mixwave_track_usage',
+  favorites: 'mixwave_track_favorites',
+};
+
+const STUDIO_MODES: StudioMode[] = ['DECKS', 'SET PLANNER', 'SHOW', 'SAMPLER', 'PAD FX', 'RECORDER', 'SHORTCUTS', 'HISTORY'];
+const MOODS: TrackMood[] = ['Warm-up', 'Groove', 'Peak', 'Chill', 'Closing'];
+const MACRO_ACTIONS: MacroAction[] = ['play-a', 'play-b', 'kick', 'snare', 'fade-a', 'fade-b', 'low-pass', 'high-pass', 'record'];
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readStored<T>(key: string, fallback: T, isValid: (value: unknown) => value is T): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return fallback;
+    const value: unknown = JSON.parse(raw);
+    if (isValid(value)) return value;
+    console.error(`Ignoring invalid MixWave local data for "${key}".`);
+    window.localStorage.removeItem(key);
+  } catch (error) {
+    console.error(`Could not read MixWave local data for "${key}":`, error);
+  }
+  return fallback;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isShowCueArray(value: unknown): value is ShowCue[] {
+  return Array.isArray(value) && value.every((item) => isObject(item)
+    && typeof item.id === 'string' && typeof item.title === 'string'
+    && typeof item.atSeconds === 'number' && typeof item.completed === 'boolean');
+}
+
+function isSessionSummaryArray(value: unknown): value is SessionSummary[] {
+  return Array.isArray(value) && value.every((item) => isObject(item)
+    && typeof item.id === 'string' && typeof item.startedAt === 'number'
+    && typeof item.endedAt === 'number' && typeof item.durationSeconds === 'number'
+    && typeof item.plays === 'number' && typeof item.uniqueTracks === 'number'
+    && typeof item.recordings === 'number');
+}
+
+function isPerformanceSession(value: unknown): value is PerformanceSession {
+  return isObject(value) && typeof value.id === 'string' && typeof value.startedAt === 'number'
+    && typeof value.plays === 'number' && value.plays >= 0 && isStringArray(value.trackIds)
+    && typeof value.recordings === 'number' && value.recordings >= 0;
+}
+
+function isShortcutMap(value: unknown): value is ShortcutMap {
+  if (!isObject(value) || !Object.keys(DEFAULT_SHORTCUTS).every((key) => typeof value[key] === 'string')) return false;
+  const keys = Object.values(value);
+  return keys.every((key) => typeof key === 'string' && key.length === 1 && !/\s/.test(key))
+    && new Set(keys).size === keys.length;
+}
+
+function isMacroMap(value: unknown): value is MacroMap {
+  return isObject(value) && [1, 2, 3, 4].every((slot) => MACRO_ACTIONS.includes(value[slot] as MacroAction));
+}
+
+function isVoiceLanguage(value: unknown): value is VoiceLanguage {
+  return value === 'en-US' || value === 'fil-PH';
+}
+
+function isTrackTagMap(value: unknown): value is Record<string, TrackTag> {
+  return isObject(value) && Object.values(value).every((tag) => isObject(tag)
+    && typeof tag.energy === 'number' && tag.energy >= 1 && tag.energy <= 5
+    && typeof tag.mood === 'string' && MOODS.includes(tag.mood as TrackMood));
+}
+
+function isTrackUsageMap(value: unknown): value is Record<string, TrackUsage> {
+  return isObject(value) && Object.values(value).every((usage) => isObject(usage)
+    && typeof usage.plays === 'number' && usage.plays >= 0 && typeof usage.lastPlayedAt === 'number');
+}
+
+function isStringSet(value: unknown): value is string[] {
+  return isStringArray(value);
+}
+
+function persistStored(key: string, value: unknown, onError: (message: string) => void) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error(`Could not save MixWave local data for "${key}":`, error);
+    onError('Could not save this feature data in browser storage.');
+  }
+}
+
+function createPerformanceSession(): PerformanceSession {
+  return { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, startedAt: Date.now(), plays: 0, trackIds: [], recordings: 0 };
+}
 
 const sources = [
   { name: 'Library', icon: Library },
@@ -149,6 +287,7 @@ function DeckPanel({
   onSkip,
   onDownload,
   onPlayingChange,
+  onTrackStart,
   onTimeUpdate,
   onDuration,
   onError,
@@ -169,6 +308,7 @@ function DeckPanel({
   onSkip: (direction: -1 | 1) => void;
   onDownload: () => void;
   onPlayingChange: (value: boolean) => void;
+  onTrackStart: () => void;
   onTimeUpdate: (value: number) => void;
   onDuration: (value: number) => void;
   onError: () => void;
@@ -220,7 +360,8 @@ function DeckPanel({
         className={`mb-1 w-full ${deck === 'A' ? 'accent-cyan-400' : 'accent-fuchsia-400'}`}
       />
       <div className="mb-3 flex justify-between font-mono text-[9px] text-slate-500">
-        <span>{formatTime(currentTime)}</span>        <span>{formatTime(duration)}</span>
+        <span>{formatTime(currentTime)}</span>
+        <span>{formatTime(duration)}</span>
       </div>
 
       <div className="grid grid-cols-[76px_1fr] gap-3">
@@ -246,7 +387,10 @@ function DeckPanel({
       <audio
         ref={audioRef}
         className="hidden"
-        onPlay={() => onPlayingChange(true)}
+        onPlay={() => {
+          onPlayingChange(true);
+          onTrackStart();
+        }}
         onPause={() => onPlayingChange(false)}
         onEnded={() => onPlayingChange(false)}
         onTimeUpdate={(event) => onTimeUpdate(event.currentTarget.currentTime)}
@@ -288,6 +432,24 @@ export default function DjStudio() {
   const [showProfile, setShowProfile] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [notice, setNotice] = useState('');
+  const [planIds, setPlanIds] = useState<string[]>(() => readStored(STORAGE_KEYS.plan, [], isStringArray));
+  const [showCues, setShowCues] = useState<ShowCue[]>(() => readStored(STORAGE_KEYS.cues, [], isShowCueArray));
+  const [showStartedAt, setShowStartedAt] = useState<number | null>(() =>
+    readStored(STORAGE_KEYS.showStartedAt, null, (value): value is number | null => value === null || typeof value === 'number'));
+  const [showElapsed, setShowElapsed] = useState(0);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [sessionHistory, setSessionHistory] = useState<SessionSummary[]>(() => readStored(STORAGE_KEYS.history, [], isSessionSummaryArray));
+  const [performanceSession, setPerformanceSession] = useState<PerformanceSession>(() =>
+    readStored(STORAGE_KEYS.session, createPerformanceSession(), isPerformanceSession));
+  const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => readStored(STORAGE_KEYS.shortcuts, DEFAULT_SHORTCUTS, isShortcutMap));
+  const [macros, setMacros] = useState<MacroMap>(() => readStored(STORAGE_KEYS.macros, DEFAULT_MACROS, isMacroMap));
+  const [voiceLanguage, setVoiceLanguage] = useState<VoiceLanguage>(() => readStored(STORAGE_KEYS.voiceLanguage, 'en-US', isVoiceLanguage));
+  const [shortcutError, setShortcutError] = useState('');
+  const [trackTags, setTrackTags] = useState<Record<string, TrackTag>>(() => readStored(STORAGE_KEYS.trackTags, {}, isTrackTagMap));
+  const [trackUsage, setTrackUsage] = useState<Record<string, TrackUsage>>(() => readStored(STORAGE_KEYS.trackUsage, {}, isTrackUsageMap));
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => readStored(STORAGE_KEYS.favorites, [], isStringSet));
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [lastVoiceCommand, setLastVoiceCommand] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState('');
   const [recordingName, setRecordingName] = useState('');
@@ -297,9 +459,12 @@ export default function DjStudio() {
   const graphCleanupTimer = useRef<number | null>(null);
   const filePicker = useRef<HTMLInputElement>(null);
   const cuePoints = useRef<Record<Deck, number>>({ A: 0, B: 0 });
+  const loadedTrackOnDeck = useRef<Record<Deck, string | null>>({ A: null, B: null });
   const recorder = useRef<MediaRecorder | null>(null);
   const objectUrls = useRef<string[]>([]);
   const recorderUrl = useRef('');
+  const countedTrackOnDeck = useRef<Record<Deck, string | null>>({ A: null, B: null });
+  const voiceRecognition = useRef<VoiceRecognition | null>(null);
 
   useEffect(() => {
     const handleInstall = (event: Event) => {
@@ -385,8 +550,32 @@ export default function DjStudio() {
     });
   }, [eqA, eqB, fxMode]);
 
+  useEffect(() => persistStored(STORAGE_KEYS.plan, planIds, setNotice), [planIds]);
+  useEffect(() => persistStored(STORAGE_KEYS.cues, showCues, setNotice), [showCues]);
+  useEffect(() => persistStored(STORAGE_KEYS.showStartedAt, showStartedAt, setNotice), [showStartedAt]);
+  useEffect(() => persistStored(STORAGE_KEYS.history, sessionHistory, setNotice), [sessionHistory]);
+  useEffect(() => persistStored(STORAGE_KEYS.session, performanceSession, setNotice), [performanceSession]);
+  useEffect(() => persistStored(STORAGE_KEYS.shortcuts, shortcuts, setNotice), [shortcuts]);
+  useEffect(() => persistStored(STORAGE_KEYS.macros, macros, setNotice), [macros]);
+  useEffect(() => persistStored(STORAGE_KEYS.voiceLanguage, voiceLanguage, setNotice), [voiceLanguage]);
+  useEffect(() => persistStored(STORAGE_KEYS.trackTags, trackTags, setNotice), [trackTags]);
+  useEffect(() => persistStored(STORAGE_KEYS.trackUsage, trackUsage, setNotice), [trackUsage]);
+  useEffect(() => persistStored(STORAGE_KEYS.favorites, favoriteIds, setNotice), [favoriteIds]);
+
+  useEffect(() => {
+    const updateClock = () => {
+      const currentTime = Date.now();
+      setClockNow(currentTime);
+      setShowElapsed(showStartedAt ? Math.max(0, Math.floor((currentTime - showStartedAt) / 1000)) : 0);
+    };
+    updateClock();
+    const interval = window.setInterval(updateClock, 1000);
+    return () => window.clearInterval(interval);
+  }, [showStartedAt]);
+
   useEffect(() => () => {
     objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    voiceRecognition.current?.stop();
   }, []);
 
   const addFile = (file: File, deck?: Deck) => {
@@ -396,10 +585,20 @@ export default function DjStudio() {
       return;
     }
 
+    const id = `${file.name.toLowerCase()}-${file.size}-${file.lastModified}`;
+    const existing = tracks.find((track) => track.id === id);
+    if (existing) {
+      loadTrack(deck || defaultDeck, existing, autoPlayLoaded);
+      setNotice(`${existing.title} is already in your local library.`);
+      return;
+    }
+
     const url = URL.createObjectURL(file);
     objectUrls.current.push(url);
+    const tag = trackTags[id] || { energy: 3, mood: 'Groove' as TrackMood };
+    const usage = trackUsage[id] || { plays: 0, lastPlayedAt: 0 };
     const track: Track = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id,
       title: file.name.replace(/\.[^/.]+$/, ''),
       artist: 'Local file',
       duration: '00:00',
@@ -408,7 +607,10 @@ export default function DjStudio() {
       file,
       url,
       addedAt: Date.now(),
-      favorite: false,
+      energy: tag.energy,
+      mood: tag.mood,
+      playCount: usage.plays,
+      favorite: favoriteIds.includes(id),
     };
     setTracks((current) => [...current, track]);
     setActiveSource('Library');
@@ -426,6 +628,8 @@ export default function DjStudio() {
     audio.loop = deck === 'A' ? loopA : loopB;
     audio.currentTime = 0;
     audio.load();
+    loadedTrackOnDeck.current[deck] = track.id;
+    countedTrackOnDeck.current[deck] = null;
     if (deck === 'A') {
       setTrackA(track);
       setCurrentTimeA(0);
@@ -506,6 +710,38 @@ export default function DjStudio() {
     const next = !(deck === 'A' ? loopA : loopB);
     if (audio) audio.loop = next;
     if (deck === 'A') setLoopA(next); else setLoopB(next);
+  };
+
+  const recordTrackStart = (deck: Deck) => {
+    const trackId = loadedTrackOnDeck.current[deck];
+    if (!trackId || countedTrackOnDeck.current[deck] === trackId) return;
+    countedTrackOnDeck.current[deck] = trackId;
+    const playedAt = Date.now();
+    setTracks((current) => current.map((item) => item.id === trackId ? { ...item, playCount: item.playCount + 1 } : item));
+    setTrackUsage((current) => ({
+      ...current,
+      [trackId]: { plays: (current[trackId]?.plays || 0) + 1, lastPlayedAt: playedAt },
+    }));
+    setPerformanceSession((current) => ({
+      ...current,
+      plays: current.plays + 1,
+      trackIds: current.trackIds.includes(trackId) ? current.trackIds : [...current.trackIds, trackId],
+    }));
+  };
+
+  const updateTrackTags = (id: string, update: { energy?: number; mood?: TrackMood }) => {
+    setTracks((current) => current.map((track) => track.id === id ? { ...track, ...update } : track));
+    setTrackTags((current) => {
+      const currentTag = current[id] || { energy: 3, mood: 'Groove' as TrackMood };
+      return { ...current, [id]: { ...currentTag, ...update } };
+    });
+  };
+
+  const updateTrackDuration = (deck: Deck, duration: number) => {
+    const id = loadedTrackOnDeck.current[deck];
+    if (!id) return;
+    const formatted = formatTime(duration);
+    setTracks((current) => current.map((track) => track.id === id ? { ...track, duration: formatted } : track));
   };
 
   const downloadTrack = (track: Track) => {
@@ -590,6 +826,7 @@ export default function DjStudio() {
         objectUrls.current.push(recorderUrl.current);
         setRecordingUrl(recorderUrl.current);
         setRecordingName(`mixwave-set-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`);
+        setPerformanceSession((current) => ({ ...current, recordings: current.recordings + 1 }));
         setNotice('Recording is ready to download.');
       };
       recorder.current = nextRecorder;
@@ -600,6 +837,188 @@ export default function DjStudio() {
       console.error('Could not start mix recording:', error);
       setNotice('Could not start recording in this browser.');
     }
+  };
+
+  const runMacro = (slot: 1 | 2 | 3 | 4) => {
+    switch (macros[slot]) {
+      case 'play-a': void toggleDeck('A'); break;
+      case 'play-b': void toggleDeck('B'); break;
+      case 'kick': void triggerPad(padNotes[0].frequency, padNotes[0].type); break;
+      case 'snare': void triggerPad(padNotes[1].frequency, padNotes[1].type); break;
+      case 'fade-a': setCrossfade(0); break;
+      case 'fade-b': setCrossfade(100); break;
+      case 'low-pass': setFxMode('Low-pass'); break;
+      case 'high-pass': setFxMode('High-pass'); break;
+      case 'record': toggleRecording(); break;
+    }
+  };
+
+  const runShortcut = (action: ShortcutAction) => {
+    switch (action) {
+      case 'playA': void toggleDeck('A'); break;
+      case 'playB': void toggleDeck('B'); break;
+      case 'cueA': setCue('A'); break;
+      case 'cueB': setCue('B'); break;
+      case 'loopA': toggleLoop('A'); break;
+      case 'loopB': toggleLoop('B'); break;
+      case 'record': toggleRecording(); break;
+      case 'macro1': runMacro(1); break;
+      case 'macro2': runMacro(2); break;
+      case 'macro3': runMacro(3); break;
+      case 'macro4': runMacro(4); break;
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey
+        || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+        || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return;
+      const pressed = event.key.toLowerCase();
+      const action = (Object.entries(shortcuts) as [ShortcutAction, string][]).find(([, key]) => key.toLowerCase() === pressed)?.[0];
+      if (!action) return;
+      event.preventDefault();
+      runShortcut(action);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [shortcuts, macros, isRecording, playingA, playingB, trackA, trackB, loopA, loopB]);
+
+  const updateShortcut = (action: ShortcutAction, key: string) => {
+    const normalized = key.toLowerCase();
+    if (!normalized || normalized.length !== 1 || /\s/.test(normalized)) return;
+    const conflict = (Object.entries(shortcuts) as [ShortcutAction, string][]).find(([otherAction, otherKey]) => otherAction !== action && otherKey.toLowerCase() === normalized);
+    if (conflict) {
+      setShortcutError(`${normalized.toUpperCase()} is already assigned. Choose a different key.`);
+      return;
+    }
+    setShortcutError('');
+    setShortcuts((current) => ({ ...current, [action]: normalized }));
+  };
+
+  const playNextTrack = (deck: Deck) => {
+    const currentTrack = deck === 'A' ? trackA : trackB;
+    const orderedTracks = planIds.map((id) => tracks.find((track) => track.id === id)).filter((track): track is Track => Boolean(track));
+    const queue = orderedTracks.length ? orderedTracks : [...tracks].sort((a, b) => a.title.localeCompare(b.title));
+    if (!queue.length) {
+      setNotice('Import tracks or build a set plan before using next track.');
+      return;
+    }
+    const currentIndex = queue.findIndex((track) => track.id === currentTrack?.id);
+    const next = queue[(currentIndex + 1) % queue.length];
+    loadTrack(deck, next, true);
+    setNotice(`Loaded ${next.title} on deck ${deck}.`);
+  };
+
+  const handleVoiceCommand = (transcript: string) => {
+    const command = transcript.trim().toLowerCase();
+    setLastVoiceCommand(command);
+    const deck: Deck = /\b(deck b|plato b|b)\b/.test(command) ? 'B' : 'A';
+
+    if (/\b(record|recording|rekord)\b/.test(command)) {
+      if (/\b(stop|finish|end|ihinto|tigil)\b/.test(command) && isRecording) toggleRecording();
+      else if (/\b(start|begin|simulan)\b/.test(command) && !isRecording) toggleRecording();
+      else setNotice(`Recording is ${isRecording ? 'active' : 'stopped'}. Say "start recording" or "stop recording".`);
+    } else if (/\b(next|skip|sunod|susunod|laktaw)\b/.test(command) && /\b(track|song|kanta)\b/.test(command)) {
+      playNextTrack(deck);
+    } else if (/\b(pause|stop|ihinto|tigil)\b/.test(command) && /\b(all|both|lahat|pareho)\b/.test(command)) {
+      audioA.current?.pause();
+      audioB.current?.pause();
+      setNotice('Paused both decks.');
+    } else if (/\b(pause|stop|ihinto|tigil|pahinga)\b/.test(command)) {
+      (deck === 'A' ? audioA.current : audioB.current)?.pause();
+      setNotice(`Paused deck ${deck}.`);
+    } else if (/\b(play|start|patugtugin|tugtog|simulan|andar)\b/.test(command) && /\b(deck|plato|track|music|song|kanta|musika|a|b)\b/.test(command)) {
+      const audio = deck === 'A' ? audioA.current : audioB.current;
+      if (audio?.paused) void toggleDeck(deck);
+      else if (!audio?.src) setNotice(`Load a track on deck ${deck} first.`);
+    } else if (/\b(cue|mark|marka)\b/.test(command)) {
+      setCue(deck);
+    } else if (/\b(loop|ulitin|paulit)\b/.test(command)) {
+      toggleLoop(deck);
+      setNotice(`Loop ${deck === 'A' ? (loopA ? 'disabled' : 'enabled') : (loopB ? 'disabled' : 'enabled')} on deck ${deck}.`);
+    } else if (/\b(planner|set plan|setlist|plano)\b/.test(command)) {
+      setActiveMode('SET PLANNER');
+    } else if (/\b(show|timeline|palabas|event)\b/.test(command)) {
+      setActiveMode('SHOW');
+    } else {
+      setNotice(`Didn't recognize "${command}". Try "play deck A", "pause deck B", "next track", or Filipino "patugtugin A".`);
+    }
+  };
+
+  const toggleVoiceControl = () => {
+    if (voiceRecognition.current) {
+      voiceRecognition.current.stop();
+      voiceRecognition.current = null;
+      setVoiceListening(false);
+      setNotice('Voice control stopped.');
+      return;
+    }
+    const SpeechRecognition = (window as VoiceRecognitionWindow).SpeechRecognition
+      || (window as VoiceRecognitionWindow).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setNotice('Voice control is not supported in this browser. Try a current Chromium-based browser.');
+      return;
+    }
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = voiceLanguage;
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.onresult = (event) => {
+        const result = event.results[event.results.length - 1];
+        if (result?.[0]?.transcript) handleVoiceCommand(result[0].transcript);
+      };
+      recognition.onerror = (event) => {
+        console.error('Voice recognition failed:', event.error);
+        voiceRecognition.current = null;
+        setNotice(`Voice control error: ${event.error}. Check microphone permission and try again.`);
+        setVoiceListening(false);
+      };
+      recognition.onend = () => {
+        if (voiceRecognition.current === recognition) {
+          voiceRecognition.current = null;
+          setVoiceListening(false);
+          setNotice('Voice control stopped.');
+        }
+      };
+      recognition.start();
+      voiceRecognition.current = recognition;
+      setVoiceListening(true);
+      setNotice('Listening for voice commands. Speech is handled by your browser.');
+    } catch (error) {
+      console.error('Could not start voice recognition:', error);
+      setNotice('Could not start voice control. Check microphone permission.');
+    }
+  };
+
+  const addShowCue = (title: string, atSeconds: number) => {
+    setShowCues((current) => [...current, {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      title,
+      atSeconds,
+      completed: false,
+    }]);
+  };
+
+  const finishPerformanceSession = () => {
+    const endedAt = Date.now();
+    setSessionHistory((current) => [...current, {
+      id: performanceSession.id,
+      startedAt: performanceSession.startedAt,
+      endedAt,
+      durationSeconds: Math.max(0, Math.floor((endedAt - performanceSession.startedAt) / 1000)),
+      plays: performanceSession.plays,
+      uniqueTracks: performanceSession.trackIds.length,
+      recordings: performanceSession.recordings,
+    }]);
+    setPerformanceSession(createPerformanceSession());
+    setNotice('Performance session saved locally.');
+  };
+
+  const updateMacro = (slot: 1 | 2 | 3 | 4, action: MacroAction) => {
+    setMacros((current) => ({ ...current, [slot]: action }));
   };
 
   const installApp = async () => {
@@ -616,11 +1035,25 @@ export default function DjStudio() {
 
   const filteredTracks = tracks
     .filter((track) => track.title.toLowerCase().includes(query.toLowerCase()) || track.artist.toLowerCase().includes(query.toLowerCase()))
-    .filter((track) => !onlyFavorites && activePlaylist !== 'Favorites' || track.favorite)
-    .sort((left, right) => activePlaylist === 'Recently added' ? right.addedAt - left.addedAt : left.title.localeCompare(right.title));
+    .filter((track) => {
+      if (onlyFavorites || activePlaylist === 'Favorites') return track.favorite;
+      if (activePlaylist === 'Most played') return track.playCount > 0;
+      if (activePlaylist === 'Peak energy') return track.energy >= 4;
+      if (activePlaylist === 'Chill & downtempo') return track.mood === 'Chill' || track.energy <= 2;
+      return true;
+    })
+    .sort((left, right) => {
+      if (activePlaylist === 'Recently added') return right.addedAt - left.addedAt;
+      if (activePlaylist === 'Most played') return right.playCount - left.playCount || left.title.localeCompare(right.title);
+      if (activePlaylist === 'Peak energy') return right.energy - left.energy || left.title.localeCompare(right.title);
+      if (activePlaylist === 'Chill & downtempo') return left.energy - right.energy || left.title.localeCompare(right.title);
+      return left.title.localeCompare(right.title);
+    });
 
   const toggleFavorite = (id: string) => {
-    setTracks((current) => current.map((track) => track.id === id ? { ...track, favorite: !track.favorite } : track));
+    const wasFavorite = favoriteIds.includes(id);
+    setFavoriteIds((current) => wasFavorite ? current.filter((trackId) => trackId !== id) : [...current, id]);
+    setTracks((current) => current.map((track) => track.id === id ? { ...track, favorite: !wasFavorite } : track));
   };
 
   const handleTrackFile = (event: ChangeEvent<HTMLInputElement>) => {
@@ -628,7 +1061,8 @@ export default function DjStudio() {
     event.currentTarget.value = '';
   };
 
-  const modes: StudioMode[] = ['DECKS', 'SAMPLER', 'PAD FX', 'RECORDER'];
+  const modes = STUDIO_MODES;
+  const playlists = ['All tracks', 'Recently added', 'Favorites', 'Most played', 'Peak energy', 'Chill & downtempo'];
 
   return (
     <div className="h-[100dvh] min-h-[620px] overflow-y-auto bg-[#0b0d10] text-slate-200">
@@ -644,11 +1078,18 @@ export default function DjStudio() {
         </div>
         <nav className="hidden h-full items-center gap-4 sm:flex">
           {modes.map((mode) => (
-            <button key={mode} type="button" onClick={() => setActiveMode(mode)} className={`h-full border-b-2 px-1 text-[10px] font-bold tracking-wider ${activeMode === mode ? 'border-cyan-400 text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-200'}`}>{mode}</button>
+            <button key={mode} type="button" onClick={() => setActiveMode(mode)} className={`flex h-full shrink-0 items-center gap-1 border-b-2 px-1 text-[9px] font-bold tracking-wider ${activeMode === mode ? 'border-cyan-400 text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-200'}`}>
+              {mode === 'SET PLANNER' && <WandSparkles className="h-3 w-3" />}
+              {mode === 'SHORTCUTS' && <Keyboard className="h-3 w-3" />}
+              {mode}
+            </button>
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-1.5">
           {installPrompt && <button type="button" onClick={installApp} className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-1.5 text-[8px] font-bold text-cyan-400 sm:text-[9px]">INSTALL</button>}
+          <button type="button" onClick={toggleVoiceControl} title={voiceListening ? 'Stop voice control' : 'Start voice control'} aria-label={voiceListening ? 'Stop voice control' : 'Start voice control'} className={`rounded-md p-2 hover:bg-white/5 ${voiceListening ? 'text-rose-300' : 'text-slate-400'}`}>
+            {voiceListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </button>
           <span className="hidden items-center gap-1.5 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[9px] font-bold text-emerald-400 sm:flex">
             <Activity className="h-3 w-3" /> LOCAL AUDIO
           </span>
@@ -684,7 +1125,7 @@ export default function DjStudio() {
             })}
           </div>
           <p className="mb-2 mt-6 px-2 text-[9px] font-bold tracking-[0.18em] text-slate-600">PLAYLISTS</p>
-          {['All tracks', 'Recently added', 'Favorites'].map((name) => (
+          {playlists.map((name) => (
             <button key={name} type="button" onClick={() => { setActivePlaylist(name); setActiveSource('Library'); setOnlyFavorites(false); }} className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-[11px] ${activePlaylist === name ? 'text-cyan-300' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
               <ListMusic className="h-3.5 w-3.5" />{name}
             </button>
@@ -701,9 +1142,10 @@ export default function DjStudio() {
               onToggle={() => void toggleDeck('A')} onFile={(file) => addFile(file, 'A')} onCue={() => setCue('A')} onSync={() => syncDeck('A')}
               onLoop={() => toggleLoop('A')} onSeek={(time) => seek('A', time)} onSkip={(direction) => skip('A', direction)}
               onDownload={() => trackA && downloadTrack(trackA)} onPlayingChange={setPlayingA} onTimeUpdate={setCurrentTimeA}
+              onTrackStart={() => recordTrackStart('A')}
               onDuration={(value) => {
                 setDurationA(value);
-                if (trackA) setTracks((current) => current.map((track) => track.id === trackA.id ? { ...track, duration: formatTime(value) } : track));
+                updateTrackDuration('A', value);
               }}
               onError={() => setNotice('This audio file could not be decoded by the browser.')}
             />
@@ -712,9 +1154,10 @@ export default function DjStudio() {
               onToggle={() => void toggleDeck('B')} onFile={(file) => addFile(file, 'B')} onCue={() => setCue('B')} onSync={() => syncDeck('B')}
               onLoop={() => toggleLoop('B')} onSeek={(time) => seek('B', time)} onSkip={(direction) => skip('B', direction)}
               onDownload={() => trackB && downloadTrack(trackB)} onPlayingChange={setPlayingB} onTimeUpdate={setCurrentTimeB}
+              onTrackStart={() => recordTrackStart('B')}
               onDuration={(value) => {
                 setDurationB(value);
-                if (trackB) setTracks((current) => current.map((track) => track.id === trackB.id ? { ...track, duration: formatTime(value) } : track));
+                updateTrackDuration('B', value);
               }}
               onError={() => setNotice('This audio file could not be decoded by the browser.')}
             />
@@ -767,6 +1210,12 @@ export default function DjStudio() {
             </div>
           )}
 
+          {lastVoiceCommand && (
+            <p className="mb-3 text-[9px] text-slate-600" aria-live="polite">
+              Voice command: “{lastVoiceCommand}” {voiceListening && '· listening'}
+            </p>
+          )}
+
           {activeMode === 'DECKS' && (
             <section className="rounded-xl border border-white/5 bg-[#15181d] p-3">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -780,7 +1229,7 @@ export default function DjStudio() {
                   </select>
                   {activeSource === 'Library' && (
                     <select aria-label="Select playlist" value={activePlaylist} onChange={(event) => { setActivePlaylist(event.target.value); setOnlyFavorites(false); }} className="max-w-32 rounded-md border border-white/5 bg-[#111318] px-2 py-2 text-[10px] text-slate-300 md:hidden">
-                      {['All tracks', 'Recently added', 'Favorites'].map((playlist) => <option key={playlist} value={playlist}>{playlist}</option>)}
+                      {playlists.map((playlist) => <option key={playlist} value={playlist}>{playlist}</option>)}
                     </select>
                   )}
                   <div className="flex h-8 w-full max-w-xs items-center rounded-md border border-white/5 bg-black/20 px-2">
@@ -803,12 +1252,22 @@ export default function DjStudio() {
                 filteredTracks.length ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                     {filteredTracks.map((track) => (
-                      <article key={track.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-white/5 bg-[#1b1e24] p-2">
+                      <article key={track.id} className="flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-white/5 bg-[#1b1e24] p-2">
                         <div className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-gradient-to-br from-cyan-500/70 to-violet-700/70"><AudioLines className="h-5 w-5 text-white/80" /></div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-bold text-white">{track.title}</p>
-                          <p className="truncate text-[10px] text-slate-500">{track.artist} · {track.duration}</p>
+                          <p className="truncate text-[10px] text-slate-500">{track.artist} · {track.duration} · {track.playCount} plays</p>
                         </div>
+                        <label className="text-[8px] text-slate-600">ENERGY
+                          <select aria-label={`Energy for ${track.title}`} value={track.energy} onChange={(event) => updateTrackTags(track.id, { energy: Number(event.target.value) })} className="ml-1 rounded bg-[#0b0d10] p-1 text-[9px] text-slate-200">
+                            {[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}</option>)}
+                          </select>
+                        </label>
+                        <label className="text-[8px] text-slate-600">MOOD
+                          <select aria-label={`Mood for ${track.title}`} value={track.mood} onChange={(event) => updateTrackTags(track.id, { mood: event.target.value as TrackMood })} className="ml-1 max-w-24 rounded bg-[#0b0d10] p-1 text-[9px] text-slate-200">
+                            {MOODS.map((mood) => <option key={mood} value={mood}>{mood}</option>)}
+                          </select>
+                        </label>
                         <button type="button" onClick={() => toggleFavorite(track.id)} title={track.favorite ? 'Remove from favorites' : 'Add to favorites'} aria-label={track.favorite ? 'Remove from favorites' : 'Add to favorites'} aria-pressed={track.favorite} className={`p-1 ${track.favorite ? 'text-amber-300' : 'text-slate-600 hover:text-amber-300'}`}><Star className={`h-3.5 w-3.5 ${track.favorite ? 'fill-current' : ''}`} /></button>
                         <button type="button" onClick={() => loadTrack('A', track, autoPlayLoaded)} title="Load on deck A" className="rounded bg-cyan-400/10 px-2 py-1 text-[9px] font-bold text-cyan-300">A</button>
                         <button type="button" onClick={() => loadTrack('B', track, autoPlayLoaded)} title="Load on deck B" className="rounded bg-fuchsia-400/10 px-2 py-1 text-[9px] font-bold text-fuchsia-300">B</button>
@@ -865,6 +1324,63 @@ export default function DjStudio() {
               </div>
               {!trackA && !trackB && <p className="mt-4 text-[10px] text-amber-300/80">Load a local track or use the sampler to create audio for your recording.</p>}
             </section>
+          )}
+
+          {activeMode === 'SET PLANNER' && (
+            <SetPlanner
+              tracks={tracks}
+              planIds={planIds}
+              onPlanChange={setPlanIds}
+              onLoadTrack={(deck, plannedTrack) => {
+                const track = tracks.find((item) => item.id === plannedTrack.id);
+                if (track) loadTrack(deck, track, autoPlayLoaded);
+              }}
+              onTagChange={updateTrackTags}
+            />
+          )}
+
+          {activeMode === 'SHOW' && (
+            <ShowTimeline
+              cues={showCues}
+              elapsed={showElapsed}
+              startedAt={showStartedAt}
+              onStart={() => {
+                const started = Date.now();
+                setShowStartedAt(started);
+                setShowCues((current) => current.map((cue) => ({ ...cue, completed: false })));
+              }}
+              onReset={() => {
+                setShowStartedAt(null);
+                setShowCues((current) => current.map((cue) => ({ ...cue, completed: false })));
+              }}
+              onAddCue={addShowCue}
+              onCompleteCue={(id) => setShowCues((current) => current.map((cue) => cue.id === id ? { ...cue, completed: true } : cue))}
+              onRemoveCue={(id) => setShowCues((current) => current.filter((cue) => cue.id !== id))}
+            />
+          )}
+
+          {activeMode === 'SHORTCUTS' && (
+            <KeyboardMacros
+              shortcuts={shortcuts}
+              macros={macros}
+              shortcutError={shortcutError}
+              onShortcutChange={updateShortcut}
+              onMacroChange={updateMacro}
+              onReset={() => {
+                setShortcuts(DEFAULT_SHORTCUTS);
+                setMacros(DEFAULT_MACROS);
+                setShortcutError('');
+              }}
+            />
+          )}
+
+          {activeMode === 'HISTORY' && (
+            <SessionHistory
+              current={performanceSession}
+              history={sessionHistory}
+              onFinish={finishPerformanceSession}
+              now={clockNow}
+            />
           )}
         </main>
 
@@ -927,6 +1443,16 @@ export default function DjStudio() {
               <select value={defaultDeck} onChange={(event) => setDefaultDeck(event.target.value as Deck)} className="mt-1 w-full rounded-md border border-white/10 bg-[#0b0d10] p-2 text-xs">
                 <option value="A">Deck A</option><option value="B">Deck B</option>
               </select>
+            </label>
+            <label className="mb-3 block text-[11px] text-slate-300">
+              Voice command language
+              <select aria-label="Voice command language" value={voiceLanguage} disabled={voiceListening} onChange={(event) => setVoiceLanguage(event.target.value as VoiceLanguage)} className="mt-1 w-full rounded-md border border-white/10 bg-[#0b0d10] p-2 text-xs disabled:opacity-50">
+                <option value="en-US">English</option>
+                <option value="fil-PH">Filipino</option>
+              </select>
+              <span className="mt-1 block text-[10px] text-slate-500">
+                Stop voice control before changing language. Filipino commands include “patugtugin A”, “ihinto B”, and “sunod na kanta”.
+              </span>
             </label>
             <label className="flex items-center gap-2 text-[11px] text-slate-300">
               <input type="checkbox" checked={autoPlayLoaded} onChange={(event) => setAutoPlayLoaded(event.target.checked)} className="accent-cyan-400" />
