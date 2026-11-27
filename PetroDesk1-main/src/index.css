@@ -18,10 +18,28 @@
     font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
     font-variant-numeric: tabular-nums;
   }
+
+  button,
+  select {
+    transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+  }
+
+  :where(button, input, select, textarea):focus-visible {
+    outline: 2px solid rgb(34 211 238 / 80%);
+    outline-offset: 2px;
+  }
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 @media print {

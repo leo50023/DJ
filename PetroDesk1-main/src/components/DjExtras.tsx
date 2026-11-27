@@ -160,8 +160,8 @@ export function SetPlanner({
   };
 
   return (
-    <section className="space-y-4 rounded-xl border border-white/5 bg-[#15181d] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <section className="space-y-3 rounded-xl border border-white/5 bg-[#15181d] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold text-white">SMART SET PLANNER</h2>
           <p className="mt-1 text-[10px] text-slate-500">Build an energy arc using your own track ratings and local play history.</p>
@@ -176,7 +176,7 @@ export function SetPlanner({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 text-[10px] text-slate-400">
+      <div className="flex flex-wrap gap-2 text-[10px] text-slate-400">
         <span>{plannedTracks.length} planned tracks</span>
         <span>Estimated play time: {formatDuration(totalSeconds)}</span>
       </div>
@@ -267,8 +267,8 @@ export function ShowTimeline({
   const secondsUntilCue = nextCue ? nextCue.atSeconds - elapsed : null;
 
   return (
-    <section className="space-y-4 rounded-xl border border-white/5 bg-[#15181d] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <section className="space-y-3 rounded-xl border border-white/5 bg-[#15181d] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold text-white">SHOW TIMELINE</h2>
           <p className="mt-1 text-[10px] text-slate-500">Plan cues against a local show clock. Times are relative to when you start.</p>
@@ -300,7 +300,7 @@ export function ShowTimeline({
             const remaining = cue.atSeconds - elapsed;
             const due = Boolean(startedAt && remaining <= 0 && !cue.completed);
             return (
-              <li key={cue.id} className={`flex items-center gap-3 rounded-lg border p-3 ${cue.completed ? 'border-emerald-500/20 bg-emerald-500/5' : due ? 'border-amber-400/30 bg-amber-400/5' : 'border-white/5 bg-[#1b1e24]'}`}>
+              <li key={cue.id} className={`flex items-center gap-2 rounded-lg border p-2.5 ${cue.completed ? 'border-emerald-500/20 bg-emerald-500/5' : due ? 'border-amber-400/30 bg-amber-400/5' : 'border-white/5 bg-[#1b1e24]'}`}>
                 <span className="w-12 shrink-0 font-mono text-xs text-cyan-300">{formatClock(cue.atSeconds)}</span>
                 <div className="min-w-0 flex-1">
                   <p className={`truncate text-xs font-semibold ${cue.completed ? 'text-slate-500 line-through' : 'text-white'}`}>{cue.title}</p>
@@ -330,8 +330,8 @@ export function SessionHistory({
 }) {
   const elapsed = Math.max(0, Math.floor((now - current.startedAt) / 1000));
   return (
-    <section className="space-y-4 rounded-xl border border-white/5 bg-[#15181d] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <section className="space-y-3 rounded-xl border border-white/5 bg-[#15181d] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold text-white">PERFORMANCE HISTORY</h2>
           <p className="mt-1 text-[10px] text-slate-500">Session stats are stored locally on this device.</p>
@@ -345,7 +345,7 @@ export function SessionHistory({
           ['Unique tracks', String(current.trackIds.length)],
           ['Recorded mixes', String(current.recordings)],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-lg border border-white/5 bg-[#1b1e24] p-3">
+          <div key={label} className="rounded-lg border border-white/5 bg-[#1b1e24] p-2.5">
             <p className="text-[9px] text-slate-500">{label}</p>
             <p className="mt-1 text-sm font-bold text-white">{value}</p>
           </div>
@@ -356,7 +356,7 @@ export function SessionHistory({
         {history.length ? (
           <ol className="space-y-2">
             {[...history].reverse().map((session) => (
-              <li key={session.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-white/5 bg-black/10 p-3 text-[10px]">
+              <li key={session.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/5 bg-black/10 p-2.5 text-[10px]">
                 <span className="font-semibold text-slate-200">{new Date(session.startedAt).toLocaleString()}</span>
                 <span className="text-slate-400">{formatDuration(session.durationSeconds)}</span>
                 <span className="text-slate-400">{session.plays} plays · {session.uniqueTracks} tracks</span>
@@ -388,8 +388,8 @@ export function KeyboardMacros({
   onReset: () => void;
 }) {
   return (
-    <section className="space-y-4 rounded-xl border border-white/5 bg-[#15181d] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <section className="space-y-3 rounded-xl border border-white/5 bg-[#15181d] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold text-white">KEYBOARD & PERFORMANCE MACROS</h2>
           <p className="mt-1 text-[10px] text-slate-500">Shortcuts work outside text fields. Click a key and press one letter, number, or symbol.</p>
@@ -399,7 +399,7 @@ export function KeyboardMacros({
       {shortcutError && <p role="alert" className="rounded-md border border-rose-400/20 bg-rose-400/5 px-3 py-2 text-[10px] text-rose-200">{shortcutError}</p>}
       <div className="grid gap-2 sm:grid-cols-2">
         {(Object.keys(ACTION_LABELS) as ShortcutAction[]).map((action) => (
-          <label key={action} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-[#1b1e24] p-3 text-[11px] text-slate-300">
+          <label key={action} className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-[#1b1e24] p-2.5 text-[11px] text-slate-300">
             <span>{ACTION_LABELS[action]}</span>
             <input aria-label={`Shortcut for ${ACTION_LABELS[action]}`} value={shortcuts[action]} maxLength={1} onChange={(event) => onShortcutChange(action, event.target.value)} className="w-12 rounded-md border border-white/10 bg-[#0b0d10] p-2 text-center font-mono font-bold uppercase text-cyan-300 outline-none focus:border-cyan-400/50" />
           </label>
@@ -409,7 +409,7 @@ export function KeyboardMacros({
         <h3 className="mb-2 text-[10px] font-bold tracking-wider text-slate-500">CONFIGURABLE MACRO PADS</h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {([1, 2, 3, 4] as const).map((slot) => (
-            <label key={slot} className="rounded-lg border border-white/5 bg-[#1b1e24] p-3 text-[10px] text-slate-400">
+            <label key={slot} className="rounded-lg border border-white/5 bg-[#1b1e24] p-2.5 text-[10px] text-slate-400">
               MACRO {slot} · KEY {shortcuts[`macro${slot}`].toUpperCase()}
               <select aria-label={`Macro ${slot} action`} value={macros[slot]} onChange={(event) => onMacroChange(slot, event.target.value as MacroAction)} className="mt-2 w-full rounded-md bg-[#0b0d10] p-2 text-[10px] text-slate-200">
                 {(Object.keys(MACRO_LABELS) as MacroAction[]).map((action) => <option key={action} value={action}>{MACRO_LABELS[action]}</option>)}
